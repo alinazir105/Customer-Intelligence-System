@@ -1,0 +1,14 @@
+# Minimal runtime for the FastAPI service (Render, Railway, etc.).
+# Avoids Jupyter, plotting stacks, and GPU-heavy optional deps from the full notebook freeze.
+# Build with: pip install -r requirements-render.txt
+
+fastapi==0.135.1
+uvicorn==0.41.0
+python-multipart==0.0.20
+pydantic==2.12.5
+numpy==2.4.3
+pandas==3.0.1
+scikit-learn==1.8.0
+scipy==1.17.1
+joblib==1.5.3
+openpyxl==3.1.5

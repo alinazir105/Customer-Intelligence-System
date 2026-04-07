@@ -1,10 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import File, UploadFile, HTTPException
-import pandas as pd
-import numpy as np
 
-from app.predictor import analyze_customer
 from app.schemas import CustomerInput
 from app.schemas import PredictionResponse
 from app.services.prediction_service import predict_single_customer
