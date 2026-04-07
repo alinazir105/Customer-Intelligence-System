@@ -179,6 +179,161 @@ body {
   font-weight: 500;
 }
 
+.config-warning {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.95rem;
+}
+
+.config-warning code {
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.mode-bar {
+  max-width: 1100px;
+  margin: 0 auto 20px auto;
+  display: flex;
+  gap: 8px;
+}
+
+.mode-tab {
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.mode-tab:hover {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.mode-tab.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.bulk-layout {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.bulk-hint {
+  margin: 0 0 16px 0;
+  color: #6b7280;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.bulk-hint code {
+  font-size: 0.85em;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #f3f4f6;
+}
+
+.file-row input[type="file"] {
+  font-size: 0.95rem;
+}
+
+.file-name {
+  margin: 12px 0 0 0;
+  font-size: 0.92rem;
+  color: #374151;
+}
+
+.bulk-result-card {
+  min-height: 200px;
+}
+
+.bulk-summary {
+  margin-bottom: 16px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.bulk-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.bulk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.bulk-table th,
+.bulk-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.bulk-table th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.bulk-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.bulk-table td:first-child {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.cell-action {
+  max-width: 220px;
+}
+
+.cell-drivers {
+  max-width: 200px;
+  color: #4b5563;
+}
+
+.risk-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.risk-pill-high {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.risk-pill-medium {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.risk-pill-low {
+  background: #dcfce7;
+  color: #15803d;
+}
+
 @media (max-width: 960px) {
   .layout {
     grid-template-columns: 1fr;
@@ -186,5 +341,9 @@ body {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .mode-bar {
+    flex-wrap: wrap;
   }
 }

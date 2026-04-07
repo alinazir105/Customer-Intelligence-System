@@ -18,6 +18,12 @@ SEGMENT_MAP = {
     2: 'High-Value but Volatile Users' 
 }
 
+"""
+Function to determine risk level based on churn probability and threshold.
+- High Risk: churn probability >= 0.75
+- Medium Risk: churn probability >= threshold but < 0.75
+- Low Risk: churn probability < threshold
+"""
 def get_risk_level(churn_prob: float, threshold: float) -> str:
     if churn_prob >= 0.75:
         return 'High'
@@ -25,9 +31,36 @@ def get_risk_level(churn_prob: float, threshold: float) -> str:
         return 'Medium'
     else:
         return 'Low'
+   
+"""
+Prediction function for batch of customers. Returns a dataframe with predictions for each customer.
+"""
+def analyze_customers_batch(
+    churn_input_df: pd.DataFrame,
+    segmentation_input_df: pd.DataFrame
+) -> pd.DataFrame:
+    churn_probs = churn_pipeline.predict_proba(churn_input_df)[:, 1]
+    churn_labels = (churn_probs >= CHURN_THRESHOLD).astype(int)
     
+    segment_transformed = segmentation_preprocessor.transform(segmentation_input_df)
+    segment_labels = segmentation_model.predict(segment_transformed)
     
-def analyze_customer(churn_input_df: pd.DataFrame, segmentation_input_df: pd.DataFrame) -> dict:
+    results_df = pd.DataFrame({
+        'churn_probability': churn_probs.astype(float),
+        'churn_label': churn_labels.astype(int),
+        'risk_level': [get_risk_level(prob, CHURN_THRESHOLD) for prob in churn_probs],
+        'segment_label': segment_labels.astype(int),
+        'segment_name': [SEGMENT_MAP[label] for label in segment_labels]
+    })
+    return results_df
+
+"""
+Prediction function for single customer. Returns a dictionary with predictions for the customer.
+"""
+def analyze_customer(
+    churn_input_df: pd.DataFrame, 
+    segmentation_input_df: pd.DataFrame
+    ) -> dict:
     churn_prob = churn_pipeline.predict_proba(churn_input_df)[:, 1][0]
     churn_label = int(churn_prob >= CHURN_THRESHOLD)
     
