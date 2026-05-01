@@ -67,7 +67,7 @@ Base URL: use the deployed API above or `http://127.0.0.1:8000` when running loc
 |--------|------|-------------|
 | `GET` | `/` | Health message |
 | `POST` | `/predict` | Single customer JSON body (`CustomerInput` — snake_case fields). Returns `PredictionResponse`. |
-| `POST` | `/bulk-predict` | Multipart form: `file` = `.csv` or `.xlsx`. Returns `BulkPredictionResponse`. |
+| `POST` | `/bulk-predict` | Multipart form: `file` = `.csv` or `.xlsx`. Returns `BulkPredictionResponse`. Requires `python-multipart` on the server. |
 
 Interactive docs: **`/docs`** (Swagger UI) when the API is running.
 
@@ -91,6 +91,15 @@ Example response:
 
 - **File**: CSV or Excel with columns matching the training schema (names with spaces), for example: `Gender`, `Senior Citizen`, `Partner`, `Dependents`, `Phone Service`, `Multiple Lines`, `Internet Service`, `Online Security`, `Online Backup`, `Device Protection`, `Tech Support`, `Streaming TV`, `Streaming Movies`, `Contract`, `Paperless Billing`, `Payment Method`, `Monthly Charges`, `Tenure Months`, `Total Charges`, `CLTV`.
 - **Response**: `total_rows`, `processed_rows`, and `records` — each record combines original columns with predictions plus `suggested_action`, `priority_score`, and `risk_drivers` (list of strings). Records are ordered by `priority_score` descending.
+
+## Frontend
+
+The React app supports:
+
+- **Single customer**: form-based scoring via `POST /predict`
+- **Bulk upload**: upload a `.csv` / `.xlsx` and view a prioritized table via `POST /bulk-predict`
+
+The frontend uses `VITE_API_BASE_URL` and calls the API from `frontend/src/api.js`.
 
 ## Tech stack
 
@@ -116,11 +125,18 @@ npm run dev
 
 The client reads `VITE_API_BASE_URL` (used in `frontend/src/api.js`). For local runs, set it to `http://127.0.0.1:8000` in `frontend/.env` or your environment.
 
+## Render deployment notes
+
+- **Recommended build command**: `pip install -r requirements-render.txt` (runtime-only deps; avoids notebook/plotting packages and GPU-heavy installs)
+- **Start command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- If you see `404` for `/bulk-predict`, check `GET /openapi.json` or `/docs` on the deployed API. If `/bulk-predict` is missing there, the service is deployed from an older commit/branch and needs a redeploy.
+
 ## Project structure
 
 ```text
 Customer-Intelligence-System/
 ├── app/
+│   ├── __init__.py
 │   ├── main.py
 │   ├── predictor.py
 │   ├── schemas.py
@@ -134,6 +150,7 @@ Customer-Intelligence-System/
 ├── notebooks/
 ├── Data/                   # e.g. Telco_customer_churn.xlsx
 ├── requirements.txt
+├── requirements-render.txt
 └── README.md
 ```
 
