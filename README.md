@@ -1,6 +1,6 @@
 # Customer Intelligence System
 
-Production-style churn prediction and customer segmentation: supervised churn scoring with a tuned decision threshold, unsupervised segmentation, and a FastAPI backend with a React (Vite) frontend.
+Production-style churn prediction and customer segmentation for a telecommunications company. Supervised churn scoring with threshold tuning, unsupervised K-Means segmentation, churn risk analysis per customer segment, and a FastAPI backend with a React (Vite) frontend.
 
 ## Live demo
 
@@ -9,16 +9,101 @@ Production-style churn prediction and customer segmentation: supervised churn sc
 | Frontend | https://customer-intelligence-system-psi.vercel.app |
 | API | https://customer-intelligence-system-umd0.onrender.com |
 
+---
+
 ## Overview
 
-The system turns notebook-trained models into a small deployable stack:
+The system turns notebook-trained models into a deployable stack that produces three outputs per customer:
 
-- **Churn**: probability, binary label (vs. tuned threshold), and **risk band** (Low / Medium / High) using the saved threshold plus a 0.75 cutoff for “High” risk.
-- **Segmentation**: K-Means cluster id and a human-readable segment name.
-- **Single customer**: JSON `POST /predict` with snake_case fields; preprocessing matches training (e.g. `log_tenure` for churn).
-- **Bulk upload**: `POST /bulk-predict` accepts **CSV or Excel** with the same columns as the training sheet; responses are sorted by a **priority score** and include **suggested actions**, **priority score**, and **rule-based risk drivers** for each row.
+- **Churn probability** — calibrated score from the final Logistic Regression pipeline.
+- **Risk band** — Low / Medium / High using the saved tuned threshold plus a 0.75 cutoff for High.
+- **Segment** — K-Means cluster id and human-readable label.
 
-Goal: show an end-to-end ML lifecycle from data and notebooks to API and UI.
+Additional capabilities:
+- **Single customer**: JSON `POST /predict` with snake_case fields.
+- **Bulk upload**: `POST /bulk-predict` accepts CSV or Excel; responses sorted by priority score and include suggested actions and rule-based risk drivers per row.
+- **Churn risk by segment**: mean and median churn probability aggregated per cluster, bridging the prediction and segmentation components.
+
+Goal: demonstrate an end-to-end ML lifecycle from raw data and notebooks to API and UI.
+
+---
+
+## Notebook walkthrough
+
+The analysis notebook (`notebooks/`) follows this structure:
+
+### 1. Business problem and dataset
+Binary classification for churn prediction (target: `Churn Value`) and unsupervised segmentation. Dataset: 7,043 California telco customers, 33 variables, Q3. Churn rate: 26.54% — class-imbalanced.
+
+### 2. EDA
+- Churn rates by every categorical feature (bar charts).
+- Box plots of numeric features (`Tenure Months`, `Monthly Charges`, `Total Charges`) against churn.
+- Correlation matrix across all features.
+- Key finding: Contract type, Internet Service, Payment Method, and Tenure are the strongest predictors.
+
+### 3. Model building
+
+**Preprocessing pipeline** (ColumnTransformer, no leakage):
+- Continuous numerics → `StandardScaler`
+- Binary numerics → passthrough
+- Categorical → `OneHotEncoder(drop='first')`
+
+**Baseline**: Logistic Regression, default threshold=0.5, no class balancing. Recall ~0.55 for churners — majority-class bias confirmed.
+
+**Feature engineering**:
+- `log_tenure = log1p(Tenure Months)` — linearizes the nonlinear early-stage churn spike. ROC-AUC: 0.847 → 0.854.
+- Early-tenure flags (`tenure_le_6`, `tenure_le_12`) were trialled and rejected — redundant with `log_tenure`, minimal recall improvement.
+- `Total Charges` removed — linear function of `Monthly Charges × Tenure Months` (multicollinearity).
+
+**Class imbalance**: handled via `class_weight='balanced'` — preferred over SMOTE given the mixed numeric/categorical feature space where interpolation is not meaningful.
+
+**Threshold tuning**: validation sweep from 0.05 to 0.95; best threshold selected by maximising recall subject to precision ≥ 0.40. Optimal threshold: **0.20**.
+
+### 4. Model selection
+
+Three models compared (all with balanced weights and threshold tuning):
+
+| Model | ROC-AUC | Recall (churn) | Precision | F1 | Threshold |
+|-------|---------|----------------|-----------|----|-----------|
+| Logistic Regression | ~0.855 | ~0.97 | ~0.41 | ~0.57 | 0.20 |
+| Random Forest | ~0.830 | ~0.90 | ~0.47 | ~0.62 | 0.25 |
+| XGBoost | ~0.830 | ~0.92 | ~0.45 | ~0.60 | 0.25 |
+
+**Logistic Regression selected** — highest ROC-AUC, highest churn recall, and best interpretability via coefficient analysis.
+
+### 5. Model evaluation
+
+- ROC-AUC: ~0.855
+- Churn recall: ~0.97 (97% of churners correctly identified)
+- Churn precision: ~0.41
+- Normalized confusion matrices — best (tuned LR) vs. worst (baseline, threshold=0.50)
+- ROC curves for all three models overlaid
+- Feature importance via Logistic Regression coefficients
+
+**Strongest churn drivers**: fiber optic internet, electronic check payment, month-to-month contract.  
+**Strongest retention factors**: two-year contract, high log_tenure, having dependents.
+
+### 6. Business recommendations
+
+Contract conversion incentives, fiber optic retention campaigns, payment method nudges toward automatic methods, early-tenure onboarding programs, and add-on service bundling.
+
+### 7. Customer segmentation
+
+K-Means clustering (k=3) on service features, billing, tenure, Total Charges, and CLTV. Cluster selection validated with Elbow Method and Silhouette Analysis.
+
+| Cluster | Segment name | Profile |
+|---------|-------------|---------|
+| 0 | Budget Minimal Users | Low charges, moderate tenure, limited services, DSL/no internet |
+| 1 | Premium Bundled Users | High charges, short tenure, fiber optic, many add-ons |
+| 2 | High-Value but Volatile | Highest charges/tenure/CLTV, but mostly month-to-month + electronic check |
+
+**Churn risk by segment**: mean churn probability aggregated per cluster using the trained model's `predict_proba` output. Cluster 2 carries the highest churn risk despite being the highest-value segment — the primary retention priority.
+
+### 8. PCA cluster validation
+
+PCA to 2 components (~54.5% explained variance). Scatter plot with cluster centroids labelled — confirms three meaningful, separable groups.
+
+---
 
 ## Architecture
 
@@ -41,39 +126,28 @@ Client (React) or file upload
 
 **Artifacts** (`models/`)
 
-- `Churn_Pipeline`, `Segmentation_Model`, `Segmentation_Preprocessor`, `Threshold_Config` (includes `churn_threshold`).
+- `Churn_Pipeline` — full sklearn Pipeline (preprocessor + Logistic Regression).
+- `Segmentation_Model` — fitted K-Means (k=3).
+- `Segmentation_Preprocessor` — fitted ColumnTransformer for segmentation features.
+- `Threshold_Config` — dict with `churn_threshold` (tuned value, not fixed at 0.5).
 
-## Models (summary)
-
-**Churn (supervised)**  
-Logistic regression (via saved pipeline), class-imbalance handling in training, **threshold tuning** stored in `Threshold_Config` (not fixed at 0.5). Feature engineering includes log-transformed tenure (`log_tenure`).
-
-**Segmentation (unsupervised)**  
-K-Means with a fitted preprocessor; clusters are mapped to labels in `app/predictor.py`.
-
-## Customer segments
-
-| Cluster | Label |
-|--------|--------|
-| 0 | Budget Minimal Users |
-| 1 | Premium Bundled Users |
-| 2 | High-Value but Volatile Users |
+---
 
 ## API
 
-Base URL: use the deployed API above or `http://127.0.0.1:8000` when running locally.
+Base URL: deployed API above or `http://127.0.0.1:8000` locally.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Health message |
-| `POST` | `/predict` | Single customer JSON body (`CustomerInput` — snake_case fields). Returns `PredictionResponse`. |
-| `POST` | `/bulk-predict` | Multipart form: `file` = `.csv` or `.xlsx`. Returns `BulkPredictionResponse`. Requires `python-multipart` on the server. |
+| `POST` | `/predict` | Single customer — JSON body (`CustomerInput`, snake_case). Returns `PredictionResponse`. |
+| `POST` | `/bulk-predict` | Multipart form: `file` = `.csv` or `.xlsx`. Returns `BulkPredictionResponse`. |
 
 Interactive docs: **`/docs`** (Swagger UI) when the API is running.
 
 ### `POST /predict`
 
-Request body uses snake_case keys aligned with `app/schemas.py`, for example: `Gender`, `Senior_Citizen`, `Partner`, `Dependents`, service and contract fields, `Monthly_Charges`, `Tenure_Months`, `Total_Charges`, `CLTV`, etc.
+Request body uses snake_case keys from `app/schemas.py`: `Gender`, `Senior_Citizen`, `Partner`, `Dependents`, service and contract fields, `Monthly_Charges`, `Tenure_Months`, `Total_Charges`, `CLTV`, etc.
 
 Example response:
 
@@ -89,27 +163,33 @@ Example response:
 
 ### `POST /bulk-predict`
 
-- **File**: CSV or Excel with columns matching the training schema (names with spaces), for example: `Gender`, `Senior Citizen`, `Partner`, `Dependents`, `Phone Service`, `Multiple Lines`, `Internet Service`, `Online Security`, `Online Backup`, `Device Protection`, `Tech Support`, `Streaming TV`, `Streaming Movies`, `Contract`, `Paperless Billing`, `Payment Method`, `Monthly Charges`, `Tenure Months`, `Total Charges`, `CLTV`.
-- **Response**: `total_rows`, `processed_rows`, and `records` — each record combines original columns with predictions plus `suggested_action`, `priority_score`, and `risk_drivers` (list of strings). Records are ordered by `priority_score` descending.
+- **File**: CSV or Excel with columns matching the training schema (names with spaces): `Gender`, `Senior Citizen`, `Partner`, `Dependents`, `Phone Service`, `Multiple Lines`, `Internet Service`, `Online Security`, `Online Backup`, `Device Protection`, `Tech Support`, `Streaming TV`, `Streaming Movies`, `Contract`, `Paperless Billing`, `Payment Method`, `Monthly Charges`, `Tenure Months`, `Total Charges`, `CLTV`.
+- **Response**: `total_rows`, `processed_rows`, and `records` — each record includes predictions plus `suggested_action`, `priority_score`, and `risk_drivers`. Records are ordered by `priority_score` descending.
+
+---
 
 ## Frontend
 
 The React app supports:
 
-- **Single customer**: form-based scoring via `POST /predict`
-- **Bulk upload**: upload a `.csv` / `.xlsx` and view a prioritized table via `POST /bulk-predict`
+- **Single customer**: form-based scoring via `POST /predict`.
+- **Bulk upload**: upload a `.csv` / `.xlsx` and view a prioritised table via `POST /bulk-predict`.
 
-The frontend uses `VITE_API_BASE_URL` and calls the API from `frontend/src/api.js`.
+Uses `VITE_API_BASE_URL` from `frontend/src/api.js`.
+
+---
 
 ## Tech stack
 
-- **Python**: FastAPI, Pydantic, Uvicorn, pandas, NumPy, scikit-learn, joblib, openpyxl (Excel).
+- **Python**: FastAPI, Pydantic, Uvicorn, pandas, NumPy, scikit-learn, XGBoost, joblib, openpyxl.
 - **Frontend**: React 19, Vite 8.
-- **Deployment**: Vercel (frontend), Render (backend); CORS allows localhost (Vite default port) and the Vercel URL.
+- **Deployment**: Vercel (frontend), Render (backend).
+
+---
 
 ## Local development
 
-**API** (from repository root, with a virtual environment and dependencies installed):
+**API** (from repository root, with virtual environment activated):
 
 ```bash
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -123,13 +203,17 @@ npm install
 npm run dev
 ```
 
-The client reads `VITE_API_BASE_URL` (used in `frontend/src/api.js`). For local runs, set it to `http://127.0.0.1:8000` in `frontend/.env` or your environment.
+Set `VITE_API_BASE_URL=http://127.0.0.1:8000` in `frontend/.env` for local runs.
+
+---
 
 ## Render deployment notes
 
-- **Recommended build command**: `pip install -r requirements-render.txt` (runtime-only deps; avoids notebook/plotting packages and GPU-heavy installs)
+- **Build command**: `pip install -r requirements-render.txt` (runtime-only; avoids notebook/plotting packages).
 - **Start command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- If you see `404` for `/bulk-predict`, check `GET /openapi.json` or `/docs` on the deployed API. If `/bulk-predict` is missing there, the service is deployed from an older commit/branch and needs a redeploy.
+- If `/bulk-predict` returns 404, check `/docs` on the deployed API — the service may be on an older commit and need a redeploy.
+
+---
 
 ## Project structure
 
@@ -145,21 +229,27 @@ Customer-Intelligence-System/
 │       ├── prediction_service.py
 │       ├── bulk_service.py
 │       └── actions.py
-├── models/                 # joblib pipelines and threshold config
+├── models/                 # Churn_Pipeline, Segmentation_Model,
+│                           # Segmentation_Preprocessor, Threshold_Config
 ├── frontend/               # Vite + React
-├── notebooks/
-├── Data/                   # e.g. Telco_customer_churn.xlsx
+├── notebooks/              # Analysis and model development
+├── Data/                   # Telco_customer_churn.xlsx
 ├── requirements.txt
 ├── requirements-render.txt
 └── README.md
 ```
 
+---
+
 ## Learning outcomes
 
-- End-to-end ML workflow from exploration to API.
-- Decisions beyond default accuracy (imbalance, threshold tuning, risk bands).
-- Serving models with FastAPI and a small React client.
-- Optional bulk scoring and lightweight business rules (actions, priority, drivers).
+- End-to-end ML workflow: exploration → feature engineering → model selection → deployment.
+- Decisions beyond default accuracy: class imbalance handling, threshold tuning, risk bands.
+- Bridging prediction and segmentation: churn probability aggregated per behavioral segment.
+- Serving models with FastAPI and a React client.
+- Bulk scoring with lightweight business rules (suggested actions, priority score, risk drivers).
+
+---
 
 ## Author
 
